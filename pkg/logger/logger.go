@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/fabiokaelin/fcommon/pkg/values"
 	"github.com/fatih/color"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -57,16 +58,13 @@ func customTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 	enc.AppendString(t.Format("02.01.2006 - 15:04:05"))
 }
 
-// InitZapCustomLogger initializes the logger with the given configuration.
-func InitZapCustomLogger(ginMode string, jsonLogs bool) {
+// InitLogger initializes the logger with the given configuration.
+func InitLogger(ginMode string, jsonLogs bool) {
 	loglevel := zapcore.DebugLevel
-	// if config.GinMode == "release" {
-	// 	loglevel = zapcore.InfoLevel
-	// }
 
 	var conf = zap.Config{}
 
-	if ginMode == "release" && jsonLogs {
+	if values.V.GinMode == "release" && values.V.JsonLogs {
 		conf = zap.Config{
 			Encoding:         "json",
 			Level:            zap.NewAtomicLevelAt(loglevel),

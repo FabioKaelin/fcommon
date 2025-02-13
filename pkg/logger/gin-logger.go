@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fabiokaelin/fcommon/pkg/values"
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
 )
@@ -19,8 +20,6 @@ var (
 		// },
 	}
 	colorGin = color.New(color.BgHiBlue, color.FgHiWhite).Sprint("[GIN]")
-	ginMode  = "release"
-	jsonLogs = true
 )
 
 // contextKeyUserName is the type for the username in the context
@@ -31,9 +30,7 @@ const (
 	UserNameKey = contextKeyUserName("username")
 )
 
-func GetGinLogger(ginModeParam string, jsonLogsParam bool) gin.HandlerFunc {
-	ginMode = ginModeParam
-	jsonLogs = jsonLogsParam
+func GetGinLogger() gin.HandlerFunc {
 	return gin.LoggerWithConfig(loggerConfig)
 }
 
@@ -69,7 +66,7 @@ func defaultLogFormatter(param gin.LogFormatterParams) string {
 		name = username.(string)
 	}
 
-	if ginMode == "release" && jsonLogs {
+	if values.V.GinMode == "release" && values.V.JsonLogs {
 		return jsonLogFormatter(param, levelSeverity, name)
 	} else {
 		return consoleLogFormatter(param, levelSeverity, name)
