@@ -59,7 +59,7 @@ func customTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 }
 
 // InitLogger initializes the logger with the given configuration.
-func InitLogger(ginMode string, jsonLogs bool) {
+func InitLogger() {
 	loglevel := zapcore.DebugLevel
 
 	var conf = zap.Config{}
