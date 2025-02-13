@@ -5,6 +5,7 @@ type (
 		GinMode              string
 		JsonLogs             bool
 		OAuthFrontendServer  string
+		OAuthBackendServer   string
 		OAuthBackendInternal string
 		ImageServiceInternal string
 		NotificationID       string
