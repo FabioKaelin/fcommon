@@ -21,4 +21,4 @@ type (
 	}
 )
 
-var V Values
+var V = Values{}

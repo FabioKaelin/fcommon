@@ -4,15 +4,19 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/fabiokaelin/fcommon/internal/database"
-	"github.com/fabiokaelin/fcommon/internal/logger"
-	"github.com/fabiokaelin/fcommon/internal/values"
+	"github.com/fabiokaelin/fcommon/pkg/database"
+	"github.com/fabiokaelin/fcommon/pkg/logger"
+	"github.com/fabiokaelin/fcommon/pkg/values"
 	"github.com/gin-gonic/gin"
 )
 
-func InitBaseHandler(router *gin.Engine, checkOAuthServer bool) {
+func InitBaseHandler(router *gin.Engine, checkOAuthServer bool, defaultMessage string) {
+	router.GET("/", defaultHandler(defaultMessage))
+	router.GET("/api", defaultHandler(defaultMessage))
+
 	router.GET("/api/ping", pingHandler)
 	router.GET("/api/version", versionHandler)
+
 	router.GET("/internal/health/live", healthLiveHandler)
 	router.GET("/internal/health/ready", healthReadyHandler(checkOAuthServer))
 }
@@ -28,12 +32,12 @@ func InitBaseHandler(router *gin.Engine, checkOAuthServer bool) {
 func versionHandler(c *gin.Context) {
 	if values.V.FVersion == "" {
 		logger.Log.Error("version not set")
-		c.AbortWithStatusJSON(500, gin.H{
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "version not set",
 		})
 		return
 	}
-	c.IndentedJSON(200, gin.H{
+	c.IndentedJSON(http.StatusOK, gin.H{
 		"version": values.V.FVersion,
 	})
 }
@@ -46,7 +50,7 @@ func versionHandler(c *gin.Context) {
 //	@Success		200	{object}	map[string]any
 //	@Router			/api/ping [get]
 func pingHandler(c *gin.Context) {
-	c.IndentedJSON(200, gin.H{
+	c.IndentedJSON(http.StatusOK, gin.H{
 		"message": "pong",
 	})
 }
@@ -59,7 +63,7 @@ func pingHandler(c *gin.Context) {
 //	@Success		200	{object}	map[string]any
 //	@Router			/internal/health/live [get]
 func healthLiveHandler(c *gin.Context) {
-	c.IndentedJSON(200, gin.H{
+	c.IndentedJSON(http.StatusOK, gin.H{
 		"status": "ok",
 	})
 }
@@ -77,7 +81,7 @@ func healthReadyHandler(checkOAuthServer bool) gin.HandlerFunc {
 
 		if !checkURL(values.V.ImageServiceInternal + "/api/ping") {
 			logger.Log.Error("Image Service Internal not ready")
-			c.AbortWithStatusJSON(500, gin.H{
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 				"error": "Image Service Internal not ready",
 			})
 			return
@@ -86,7 +90,7 @@ func healthReadyHandler(checkOAuthServer bool) gin.HandlerFunc {
 		if checkOAuthServer {
 			if !checkURL(values.V.OAuthBackendInternal + "/internal/health/ready") {
 				logger.Log.Error("OAuth Backend Internal not ready")
-				c.AbortWithStatusJSON(500, gin.H{
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 					"error": "OAuth Backend Internal not ready",
 				})
 				return
@@ -97,14 +101,31 @@ func healthReadyHandler(checkOAuthServer bool) gin.HandlerFunc {
 		if err != nil {
 			logger.Log.Error(err.Error())
 			logger.Log.Error("database not ready")
-			c.AbortWithStatusJSON(500, gin.H{
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 				"error": "database not ready",
 			})
 			return
 		}
 
-		c.IndentedJSON(200, gin.H{
+		c.IndentedJSON(http.StatusOK, gin.H{
 			"status": "ok",
+		})
+	}
+}
+
+// defaultHandler godoc
+//
+//	@Summary		defaultHandler
+//	@Description	defaultHandler
+//	@Tags			default
+//	@Produce		json
+//	@Success		200	{string}	string
+//	@Router			/ [get]
+//	@Router			/api [get]
+func defaultHandler(message string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.IndentedJSON(http.StatusOK, gin.H{
+			"message": message,
 		})
 	}
 }

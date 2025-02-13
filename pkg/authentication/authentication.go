@@ -8,12 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
-	"github.com/fabiokaelin/fcommon/internal/logger"
-	"github.com/fabiokaelin/fcommon/internal/notification"
-	"github.com/fabiokaelin/fcommon/internal/users"
-	"github.com/fabiokaelin/fcommon/internal/values"
+	"github.com/fabiokaelin/fcommon/pkg/logger"
+	"github.com/fabiokaelin/fcommon/pkg/notification"
+	"github.com/fabiokaelin/fcommon/pkg/users"
+	"github.com/fabiokaelin/fcommon/pkg/values"
+
 	"github.com/fabiokaelin/ferror"
+
+	"github.com/davecgh/go-spew/spew"
 	"github.com/gin-gonic/gin"
 )
 

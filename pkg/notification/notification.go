@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/fabiokaelin/fcommon/internal/values"
+	"github.com/fabiokaelin/fcommon/pkg/values"
 	"github.com/fabiokaelin/ferror"
 )
 

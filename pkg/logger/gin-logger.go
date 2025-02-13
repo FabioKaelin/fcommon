@@ -46,6 +46,10 @@ func defaultLogFormatter(param gin.LogFormatterParams) string {
 		levelSeverity = "DEBUG"
 	}
 
+	if param.Method == "OPTIONS" {
+		levelSeverity = "DEBUG"
+	}
+
 	if param.StatusCode >= 500 {
 		levelSeverity = "ERROR"
 	} else if param.StatusCode >= 400 {

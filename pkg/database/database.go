@@ -11,8 +11,8 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 
-	"github.com/fabiokaelin/fcommon/internal/logger"
-	"github.com/fabiokaelin/fcommon/internal/values"
+	"github.com/fabiokaelin/fcommon/pkg/logger"
+	"github.com/fabiokaelin/fcommon/pkg/values"
 	"github.com/fabiokaelin/ferror"
 )
 
