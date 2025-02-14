@@ -64,7 +64,7 @@ func InitLogger() {
 
 	var conf = zap.Config{}
 
-	if values.V.GinMode == "release" && values.V.JsonLogs {
+	if values.V.JsonLogs {
 		conf = zap.Config{
 			Encoding:         "json",
 			Level:            zap.NewAtomicLevelAt(loglevel),

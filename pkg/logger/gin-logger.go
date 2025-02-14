@@ -83,7 +83,7 @@ func defaultLogFormatter(param gin.LogFormatterParams) string {
 		}
 	}
 
-	if values.V.GinMode == "release" && values.V.JsonLogs {
+	if values.V.JsonLogs {
 		return jsonLogFormatter(param, levelSeverity, name)
 	} else {
 		return consoleLogFormatter(param, levelSeverity, name)
