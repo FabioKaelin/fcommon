@@ -122,7 +122,7 @@ func consoleLogFormatter(param gin.LogFormatterParams, levelSeverity string, nam
 		name = name[:10]
 	}
 	// array with any
-	loggingArgs := []interface{}{}
+	loggingArgs := []any{}
 	loggingArgs = append(loggingArgs, colorGin)
 	loggingArgs = append(loggingArgs, param.TimeStamp.Format("02.01.2006 - 15:04:05"))
 	loggingArgs = append(loggingArgs, getLevelColor(levelSeverity).Sprintf(" %-5s ", levelSeverity))
