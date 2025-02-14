@@ -10,7 +10,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func InitBaseHandler(router *gin.Engine, checkOAuthServer bool, defaultMessage string) {
+type IgnoreChecks struct {
+	OAuthServer bool
+	ImageServer bool
+	Database    bool
+}
+
+func InitBaseHandler(router *gin.Engine, ignored IgnoreChecks, defaultMessage string) {
 	router.GET("/", defaultHandler(defaultMessage))
 	router.GET("/api", defaultHandler(defaultMessage))
 
@@ -18,7 +24,7 @@ func InitBaseHandler(router *gin.Engine, checkOAuthServer bool, defaultMessage s
 	router.GET("/api/version", versionHandler)
 
 	router.GET("/internal/health/live", healthLiveHandler)
-	router.GET("/internal/health/ready", healthReadyHandler(checkOAuthServer))
+	router.GET("/internal/health/ready", healthReadyHandler(ignored))
 }
 
 // versionHandler godoc
@@ -76,18 +82,20 @@ func healthLiveHandler(c *gin.Context) {
 //	@Success		200	{object}	map[string]any
 //	@Failure		500	{object}	map[string]any
 //	@Router			/internal/health/ready [get]
-func healthReadyHandler(checkOAuthServer bool) gin.HandlerFunc {
+func healthReadyHandler(ignored IgnoreChecks) gin.HandlerFunc {
 	return func(c *gin.Context) {
 
-		if !checkURL(values.V.ImageServiceInternal + "/api/ping") {
-			logger.Log.Error("Image Service Internal not ready")
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-				"error": "Image Service Internal not ready",
-			})
-			return
+		if !ignored.ImageServer {
+			if !checkURL(values.V.ImageServiceInternal + "/api/ping") {
+				logger.Log.Error("Image Service Internal not ready")
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+					"error": "Image Service Internal not ready",
+				})
+				return
+			}
 		}
 
-		if checkOAuthServer {
+		if !ignored.OAuthServer {
 			if !checkURL(values.V.OAuthBackendInternal + "/internal/health/ready") {
 				logger.Log.Error("OAuth Backend Internal not ready")
 				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -97,14 +105,16 @@ func healthReadyHandler(checkOAuthServer bool) gin.HandlerFunc {
 			}
 		}
 
-		err := database.DBConnection.Ping()
-		if err != nil {
-			logger.Log.Error(err.Error())
-			logger.Log.Error("database not ready")
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-				"error": "database not ready",
-			})
-			return
+		if !ignored.Database {
+			err := database.DBConnection.Ping()
+			if err != nil {
+				logger.Log.Error(err.Error())
+				logger.Log.Error("database not ready")
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+					"error": "database not ready",
+				})
+				return
+			}
 		}
 
 		c.IndentedJSON(http.StatusOK, gin.H{

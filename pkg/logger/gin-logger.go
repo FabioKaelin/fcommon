@@ -30,7 +30,20 @@ const (
 	UserNameKey = contextKeyUserName("username")
 )
 
-func GetGinLogger() gin.HandlerFunc {
+var (
+	logUsername    = true
+	templateString = ""
+)
+
+func GetGinLogger(logUsernameParam bool) gin.HandlerFunc {
+	logUsername = logUsernameParam
+
+	stringTemplate := "%s %v |%-5s|%s %3d %s| %13s |"
+	if logUsername {
+		stringTemplate += " %10s |"
+	}
+	stringTemplate += "%s %-7s %s %#v\n%s"
+
 	return gin.LoggerWithConfig(loggerConfig)
 }
 
@@ -59,11 +72,15 @@ func defaultLogFormatter(param gin.LogFormatterParams) string {
 		param.Latency = param.Latency.Round(time.Microsecond)
 	}
 
-	username := param.Request.Context().Value(UserNameKey)
-
 	name := "<nil>"
-	if username != nil {
-		name = username.(string)
+
+	if logUsername {
+
+		username := param.Request.Context().Value(UserNameKey)
+
+		if username != nil {
+			name = username.(string)
+		}
 	}
 
 	if values.V.GinMode == "release" && values.V.JsonLogs {
@@ -104,18 +121,25 @@ func consoleLogFormatter(param gin.LogFormatterParams, levelSeverity string, nam
 	if len(name) > 10 {
 		name = name[:10]
 	}
+	// array with any
+	loggingArgs := []interface{}{}
+	loggingArgs = append(loggingArgs, colorGin)
+	loggingArgs = append(loggingArgs, param.TimeStamp.Format("02.01.2006 - 15:04:05"))
+	loggingArgs = append(loggingArgs, getLevelColor(levelSeverity).Sprintf(" %-5s ", levelSeverity))
+	loggingArgs = append(loggingArgs, statusColor)
+	loggingArgs = append(loggingArgs, param.StatusCode)
+	loggingArgs = append(loggingArgs, resetColor)
+	loggingArgs = append(loggingArgs, param.Latency)
+	if logUsername {
+		loggingArgs = append(loggingArgs, name)
+	}
+	loggingArgs = append(loggingArgs, methodColor)
+	loggingArgs = append(loggingArgs, param.Method)
+	loggingArgs = append(loggingArgs, resetColor)
+	loggingArgs = append(loggingArgs, param.Path)
+	loggingArgs = append(loggingArgs, param.ErrorMessage)
 
-	return fmt.Sprintf("%s %v |%-5s|%s %3d %s| %13s | %10s |%s %-7s %s %#v\n%s",
-		colorGin,
-		param.TimeStamp.Format("02.01.2006 - 15:04:05"),
-		getLevelColor(levelSeverity).Sprintf(" %-5s ", levelSeverity),
-		statusColor, param.StatusCode, resetColor,
-		param.Latency,
-		name,
-		methodColor, param.Method, resetColor,
-		param.Path,
-		param.ErrorMessage,
-	)
+	return fmt.Sprintf(templateString, loggingArgs...)
 }
 func jsonLogFormatter(param gin.LogFormatterParams, levelSeverity string, name string) string {
 	log := make(map[string]interface{})
@@ -123,7 +147,9 @@ func jsonLogFormatter(param gin.LogFormatterParams, levelSeverity string, name s
 	log["level"] = levelSeverity
 	log["status"] = param.StatusCode
 	log["latency"] = param.Latency
-	log["username"] = name
+	if logUsername {
+		log["username"] = name
+	}
 	log["method"] = param.Method
 	log["path"] = param.Path
 	log["error"] = param.ErrorMessage
