@@ -44,6 +44,8 @@ func GetGinLogger(logUsernameParam bool) gin.HandlerFunc {
 	}
 	stringTemplate += "%s %-7s %s %#v\n%s"
 
+	templateString = stringTemplate
+
 	return gin.LoggerWithConfig(loggerConfig)
 }
 
