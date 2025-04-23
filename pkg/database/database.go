@@ -61,6 +61,7 @@ func updateDBConnection() ferror.FError {
 	// test if connection is working
 	err = dbNew.Ping()
 	if err != nil {
+		fmt.Println(err)
 		DBConnection = nil
 		ferr := ferror.New("ping to db failed")
 		ferr.SetLayer("db")
