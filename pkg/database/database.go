@@ -32,6 +32,8 @@ func InitDatabase() ferror.FError {
 			}
 		}
 	}
+
+	startDatabaseHealthCheck(5 * time.Minute)
 	return nil
 }
 
@@ -73,24 +75,44 @@ func updateDBConnection() ferror.FError {
 		DBConnection = nil
 	}
 	DBConnection = dbNew
-	DBConnection.SetMaxOpenConns(30)
-	DBConnection.SetMaxIdleConns(5)
+	DBConnection.SetMaxOpenConns(100)
+	DBConnection.SetMaxIdleConns(30)
 	maxLifeTime := time.Minute * 30
 	DBConnection.SetConnMaxLifetime(maxLifeTime)
 	return nil
 }
 
+// startDatabaseHealthCheck startet eine Hintergrundroutine für regelmässige Pings
+func startDatabaseHealthCheck(interval time.Duration) {
+	go func() {
+		for {
+			time.Sleep(interval)
+			if DBConnection == nil {
+				logger.Log.Warn("DBConnection is nil, trying to reconnect...")
+				_ = updateDBConnection()
+				continue
+			}
+
+			err := DBConnection.Ping()
+			if err != nil {
+				logger.Log.Warn("Ping failed, reconnecting... Error: " + err.Error())
+				_ = updateDBConnection()
+			}
+		}
+	}()
+}
+
 // RunSQL executes a query
 func RunSQL(query string, parameters ...any) (*sql.Rows, ferror.FError) {
 	if DBConnection != nil {
-		err := DBConnection.Ping()
-		if err != nil {
-			logger.Log.Warn("DB Connection lost, reconnecting...")
-			ferr := updateDBConnection()
-			if ferr != nil {
-				return &sql.Rows{}, ferr
-			}
-		}
+		// err := DBConnection.Ping()
+		// if err != nil {
+		// 	logger.Log.Warn("DB Connection lost, reconnecting...")
+		// 	ferr := updateDBConnection()
+		// 	if ferr != nil {
+		// 		return &sql.Rows{}, ferr
+		// 	}
+		// }
 		rows, err := DBConnection.Query(query, parameters...)
 		if err != nil {
 			ferr := ferror.FromError(err)
