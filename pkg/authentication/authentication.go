@@ -2,9 +2,11 @@ package authentication
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
+	"github.com/fabiokaelin/fcommon/pkg/oauthsession"
+	"github.com/fabiokaelin/fcommon/pkg/ratelimit"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -45,127 +47,65 @@ func SetRequiredFunctions(userExistFunc UserExistFunc, getUserByIDFunc GetUserBy
 	createUser = createUserFunc
 }
 
-// CheckLoginRequest checks if the user is logged in and if not it returns an error this is for automated requests
-func CheckLoginRequest() gin.HandlerFunc {
+var sessionClient = oauthsession.NewClient()
+
+// CheckLoginRequest validates and renews a session on authenticated API activity.
+func CheckLoginRequest() gin.HandlerFunc { return checkLogin(false) }
+func CheckLoginUser() gin.HandlerFunc    { return checkLogin(true) }
+
+func checkLogin(redirectBrowser bool) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		token := ""
-		cookie, err := ctx.Cookie("token")
-		if err != nil {
-			tokenHeader := ctx.Request.Header.Get("token")
-			if tokenHeader != "" {
-				token = tokenHeader
+		reject := func(status int) {
+			if redirectBrowser && status == http.StatusUnauthorized {
+				from := "https://" + ctx.Request.Host + ctx.Request.URL.RequestURI()
+				ctx.Redirect(http.StatusSeeOther, values.V.OAuthFrontendServer+"/login?from="+url.QueryEscape(from))
 			} else {
-				ctx.AbortWithStatusJSON(http.StatusUnauthorized, redirect{Redirect: values.V.OAuthFrontendServer + "/login"})
-				return
+				ctx.AbortWithStatusJSON(status, redirect{Redirect: values.V.OAuthFrontendServer + "/login"})
 			}
+		}
+		token := ""
+		cookies := ctx.Request.CookiesNamed("token")
+		if len(cookies) > 1 {
+			reject(http.StatusUnauthorized)
+			return
+		}
+		if len(cookies) == 1 {
+			if ctx.Request.Method != "GET" && ctx.Request.Method != "HEAD" && ctx.Request.Method != "OPTIONS" {
+				origin := ctx.GetHeader("Origin")
+				if origin == "" {
+					if ref, err := url.Parse(ctx.Request.Referer()); err == nil && ref.Host != "" {
+						origin = ref.Scheme + "://" + ref.Host
+					}
+				}
+				if origin != "https://"+ctx.Request.Host {
+					ctx.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Cross-origin write forbidden"})
+					return
+				}
+			}
+			token = cookies[0].Value
 		} else {
-			token = cookie
+			token = ctx.GetHeader("token")
 		}
-
-		// TODO: Add cache
-		// userData, ok := cache.C.ReadUser(token)
-		// if ok {
-		// 	ctx.Set("user", userData)
-		// 	ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), logger.UserNameKey, userData.Name))
-		// 	ctx.Next()
-		// 	return
-		// }
-
-		client := http.Client{}
-		req, err := http.NewRequest("GET", values.V.OAuthBackendInternal+"/api/users/me", nil)
+		result, err := sessionClient.Validate(ctx.Request.Context(), values.V.OAuthBackendInternal+"/api/users/me", token)
 		if err != nil {
-			// ctx.AbortWithStatus(204)
-			logger.Log.Warn(err.Error())
-
-			ctx.AbortWithStatusJSON(http.StatusUnauthorized, redirect{Redirect: values.V.OAuthFrontendServer + "/login"})
-
-			// ctx.Redirect(http.StatusTemporaryRedirect, "https://oauth.fabkli.ch/login")
-			// ctx.JSON(200, "error"+err.Error())
+			status := http.StatusServiceUnavailable
+			if errors.Is(err, oauthsession.ErrUnauthenticated) {
+				status = http.StatusUnauthorized
+			}
+			reject(status)
 			return
 		}
-
-		req.Header = http.Header{
-			// "Host":          {"www.host.com"},
-			"Content-Type":  {"application/json"},
-			"Authorization": {"Bearer " + token},
-		}
-
-		res, err := client.Do(req)
-		if err != nil {
-			logger.Log.Warn(err.Error())
-			// ctx.Redirect(http.StatusTemporaryRedirect, "https://oauth.fabkli.ch/login") // ?from=" + ctx.Request.URL.Path)
-			// ctx.AbortWithStatus(204)
-			ctx.AbortWithStatusJSON(http.StatusUnauthorized, redirect{Redirect: values.V.OAuthFrontendServer + "/login"})
-
-			// ctx.Redirect(http.StatusTemporaryRedirect, "/login")
-			// ctx.JSON(200, "error"+err.Error())
-			return
-		}
-		responseJSON := users.Minimal{}
-		json.NewDecoder(res.Body).Decode(&responseJSON)
+		responseJSON := users.Minimal{ID: result.User.ID, Name: result.User.Name, Email: result.User.Email, Privileges: result.User.Privileges}
 		responseUser, err := checkUser(responseJSON)
 		if err != nil {
 			logger.Log.Warn(err.Error())
-			// ctx.Redirect(http.StatusTemporaryRedirect, "https://oauth.fabkli.ch/login") // ?from=" + ctx.Request.URL.Path)
-			// ctx.AbortWithStatus(204)
-			ctx.AbortWithStatusJSON(http.StatusUnauthorized, redirect{Redirect: values.V.OAuthFrontendServer + "/login"})
-			// ctx.JSON(200, "error"+err.Error())
+			reject(http.StatusUnauthorized)
 			return
 		}
-
-		// TODO: Add cache
-		// cache.C.UpdateUser(token, responseUser)
-		ctx.Set("user", responseUser)
-		ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), logger.UserNameKey, responseUser.Name))
-		ctx.Next()
-	}
-}
-
-// CheckLoginUser checks if the user is logged in and if not redirects to the login page this if for manual user requests
-func CheckLoginUser() gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		token := ""
-		cookie, err := ctx.Cookie("token")
-		if err != nil {
-			tokenHeader := ctx.Request.Header.Get("token")
-			if tokenHeader != "" {
-				token = tokenHeader
-			} else {
-				ctx.Redirect(http.StatusMovedPermanently, values.V.OAuthFrontendServer+`/login?from=`+ctx.Request.Host+ctx.Request.URL.Path)
-				return
-			}
-		} else {
-			token = cookie
-		}
-		client := http.Client{}
-		req, err := http.NewRequest("GET", values.V.OAuthBackendInternal+"/api/users/me", nil)
-		if err != nil {
-			ctx.Redirect(http.StatusMovedPermanently, values.V.OAuthFrontendServer+`/login?from=`+ctx.Request.Host+ctx.Request.URL.Path)
-
+		if !ratelimit.User(ctx, responseUser.ID) {
 			return
 		}
-
-		req.Header = http.Header{
-			// "Host":          {"www.host.com"},
-			"Content-Type":  {"application/json"},
-			"Authorization": {"Bearer " + token},
-		}
-
-		res, err := client.Do(req)
-		if err != nil {
-			logger.Log.Warn(err.Error())
-			ctx.Redirect(http.StatusMovedPermanently, values.V.OAuthFrontendServer+`/login?from=`+ctx.Request.Host+ctx.Request.URL.Path)
-			return
-		}
-		responseJSON := users.Minimal{}
-		json.NewDecoder(res.Body).Decode(&responseJSON)
-		responseUser, err := checkUser(responseJSON)
-		if err != nil {
-			logger.Log.Warn(err.Error())
-			ctx.Redirect(http.StatusMovedPermanently, values.V.OAuthFrontendServer+`/login?from=`+ctx.Request.Host+ctx.Request.URL.Path)
-			return
-		}
-
+		result.ForwardCookies(ctx.Writer)
 		ctx.Set("user", responseUser)
 		ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), logger.UserNameKey, responseUser.Name))
 		ctx.Next()

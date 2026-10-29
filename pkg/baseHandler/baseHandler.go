@@ -1,9 +1,11 @@
 package baseHandler
 
 import (
+	"context"
 	"net/http"
 	"time"
 
+	"github.com/fabiokaelin/fcommon/pkg/buildinfo"
 	"github.com/fabiokaelin/fcommon/pkg/database"
 	"github.com/fabiokaelin/fcommon/pkg/logger"
 	"github.com/fabiokaelin/fcommon/pkg/values"
@@ -36,16 +38,8 @@ func InitBaseHandler(router *gin.Engine, ignored IgnoreChecks, defaultMessage st
 //	@Failure		500	{object}	map[string]any
 //	@Router			/api/version [get]
 func versionHandler(c *gin.Context) {
-	if values.V.FVersion == "" {
-		logger.Log.Error("version not set")
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": "version not set",
-		})
-		return
-	}
-	c.IndentedJSON(http.StatusOK, gin.H{
-		"version": values.V.FVersion,
-	})
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, buildinfo.Current(values.V.FVersion))
 }
 
 // pingHandler godoc
@@ -84,9 +78,11 @@ func healthLiveHandler(c *gin.Context) {
 //	@Router			/internal/health/ready [get]
 func healthReadyHandler(ignored IgnoreChecks) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+		defer cancel()
 
 		if !ignored.ImageServer {
-			if !checkURL(values.V.ImageServiceInternal + "/api/ping") {
+			if !checkURL(ctx, values.V.ImageServiceInternal+"/api/ping") {
 				logger.Log.Error("Image Service Internal not ready")
 				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 					"error": "Image Service Internal not ready",
@@ -96,7 +92,7 @@ func healthReadyHandler(ignored IgnoreChecks) gin.HandlerFunc {
 		}
 
 		if !ignored.OAuthServer {
-			if !checkURL(values.V.OAuthBackendInternal + "/internal/health/ready") {
+			if !checkURL(ctx, values.V.OAuthBackendInternal+"/internal/health/ready") {
 				logger.Log.Error("OAuth Backend Internal not ready")
 				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 					"error": "OAuth Backend Internal not ready",
@@ -106,7 +102,11 @@ func healthReadyHandler(ignored IgnoreChecks) gin.HandlerFunc {
 		}
 
 		if !ignored.Database {
-			err := database.DBConnection.Ping()
+			if database.DBConnection == nil {
+				c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "Database not ready"})
+				return
+			}
+			err := database.DBConnection.PingContext(ctx)
 			if err != nil {
 				logger.Log.Error(err.Error())
 				logger.Log.Error("database not ready")
@@ -141,12 +141,16 @@ func defaultHandler(message string) gin.HandlerFunc {
 }
 
 // checkURL sends a GET request and checks if the response is 200 OK
-func checkURL(url string) bool {
+func checkURL(ctx context.Context, url string) bool {
 	client := http.Client{
 		Timeout: 3 * time.Second, // Set a timeout to avoid hanging requests
 	}
 
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		logger.Log.Error(err.Error())
 		return false
